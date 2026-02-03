@@ -1,0 +1,19 @@
+// 缓动函数
+export const easeOutCubic = (t) => {
+    return 1 - Math.pow(1 - t, 3)
+}
+
+export const easeInOutCubic = (t) => {
+    return t < 0.5
+        ? 4 * t * t * t
+        : 1 - Math.pow(-2 * t + 2, 3) / 2
+}
+
+export const easeOutElastic = (t) => {
+    const c4 = (2 * Math.PI) / 3
+    return t === 0
+        ? 0
+        : t === 1
+            ? 1
+            : Math.pow(2, -10 * t) * Math.sin((t * 10 - 0.75) * c4) + 1
+}
