@@ -78,9 +78,3 @@ def create_app():
 
     return app, scheduler
 
-
-# 注意：这里不直接创建app实例，由调用者通过工厂函数创建
-app, scheduler = create_app()
-
-if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
