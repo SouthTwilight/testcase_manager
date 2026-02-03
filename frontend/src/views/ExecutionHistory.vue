@@ -480,9 +480,11 @@ const handleClearHistory = async () => {
         }
     )
 
-    // 这里调用删除API
-    // 由于没有删除API，我们先模拟删除
-    ElMessage.success('执行记录删除成功')
+    // 调用删除API，逐个删除选中的记录
+    const deletePromises = selectedRows.value.map(row => api.deleteExecution(row.id))
+    await Promise.all(deletePromises)
+
+    ElMessage.success(`成功删除 ${selectedRows.value.length} 条执行记录`)
 
     // 重新加载数据
     fetchExecutionHistory()

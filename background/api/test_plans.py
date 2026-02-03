@@ -1,7 +1,7 @@
 import json
 from datetime import datetime
 from flask import Blueprint, request, jsonify
-from app import db
+from extra.extensions import db
 from models import TestPlan
 
 test_plans_bp = Blueprint('test_plans', __name__, url_prefix='/api/test-plans')
@@ -163,3 +163,174 @@ def execute_plan_async(plan_id):
                 plan.status = 'failed'
                 db.session.commit()
             print(f"执行计划失败: {str(e)}")
+
+
+@test_plans_bp.route('/<int:plan_id>/pause', methods=['POST'])
+def pause_test_plan(plan_id):
+    """暂停测试计划"""
+    plan = TestPlan.query.get(plan_id)
+
+    if not plan:
+        return jsonify({
+            'success': False,
+            'message': '测试计划不存在'
+        }), 404
+
+    if plan.status != 'running':
+        return jsonify({
+            'success': False,
+            'message': f'无法暂停状态为 {plan.status} 的计划'
+        }), 400
+
+    # 更新计划状态为暂停
+    plan.status = 'paused'
+    db.session.commit()
+
+    return jsonify({
+        'success': True,
+        'message': '测试计划已暂停'
+    })
+
+
+@test_plans_bp.route('/<int:plan_id>/resume', methods=['POST'])
+def resume_test_plan(plan_id):
+    """继续执行测试计划"""
+    plan = TestPlan.query.get(plan_id)
+
+    if not plan:
+        return jsonify({
+            'success': False,
+            'message': '测试计划不存在'
+        }), 404
+
+    if plan.status != 'paused':
+        return jsonify({
+            'success': False,
+            'message': f'无法继续状态为 {plan.status} 的计划'
+        }), 400
+
+    # 更新计划状态为运行中
+    plan.status = 'running'
+    db.session.commit()
+
+    return jsonify({
+        'success': True,
+        'message': '测试计划已继续执行'
+    })
+
+
+@test_plans_bp.route('/<int:plan_id>', methods=['PUT'])
+def update_test_plan(plan_id):
+    """更新测试计划"""
+    plan = TestPlan.query.get(plan_id)
+
+    if not plan:
+        return jsonify({
+            'success': False,
+            'message': '测试计划不存在'
+        }), 404
+
+    data = request.get_json()
+
+    # 允许更新的字段
+    if 'name' in data:
+        plan.name = data['name']
+    if 'description' in data:
+        plan.description = data['description']
+    if 'case_ids' in data:
+        plan.case_ids = json.dumps(data['case_ids'])
+        plan.total_cases = len(data['case_ids'])
+    if 'priorities' in data:
+        plan.priorities = json.dumps(data['priorities'])
+    if 'retry_count' in data:
+        plan.retry_count = data['retry_count']
+    if 'timeout_minutes' in data:
+        plan.timeout_minutes = data['timeout_minutes']
+
+    db.session.commit()
+
+    return jsonify({
+        'success': True,
+        'message': '测试计划更新成功',
+        'plan': plan.to_dict()
+    })
+
+
+@test_plans_bp.route('/<int:plan_id>', methods=['DELETE'])
+def delete_test_plan(plan_id):
+    """删除测试计划"""
+    plan = TestPlan.query.get(plan_id)
+
+    if not plan:
+        return jsonify({
+            'success': False,
+            'message': '测试计划不存在'
+        }), 404
+
+    # 检查计划是否正在运行
+    if plan.status == 'running':
+        return jsonify({
+            'success': False,
+            'message': '无法删除正在运行的计划，请先暂停执行'
+        }), 400
+
+    plan_id_val = plan.id
+    plan_name = plan.name
+
+    db.session.delete(plan)
+    db.session.commit()
+
+    return jsonify({
+        'success': True,
+        'message': f'测试计划 "{plan_name}" 已删除',
+        'plan_id': plan_id_val
+    })
+
+
+@test_plans_bp.route('/<int:plan_id>/tasks', methods=['GET'])
+def get_plan_tasks(plan_id):
+    """获取测试计划的执行任务列表"""
+    from models import ExecutionTask
+
+    plan = TestPlan.query.get(plan_id)
+
+    if not plan:
+        return jsonify({
+            'success': False,
+            'message': '测试计划不存在'
+        }), 404
+
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 50, type=int)
+    status = request.args.get('status')
+
+    query = ExecutionTask.query.filter_by(plan_id=plan_id)
+
+    if status:
+        query = query.filter_by(status=status)
+
+    query = query.order_by(ExecutionTask.created_at.desc())
+
+    pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+
+    tasks = []
+    for task in pagination.items:
+        tasks.append({
+            'id': task.id,
+            'task_id': task.task_id,
+            'case_hash': task.case_hash,
+            'status': task.status,
+            'machine_id': task.machine_id,
+            'created_at': task.created_at.isoformat() if task.created_at else None,
+            'started_at': task.started_at.isoformat() if task.started_at else None,
+            'completed_at': task.completed_at.isoformat() if task.completed_at else None,
+            'result': task.result
+        })
+
+    return jsonify({
+        'success': True,
+        'tasks': tasks,
+        'total': pagination.total,
+        'pages': pagination.pages,
+        'current_page': page
+    })

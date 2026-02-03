@@ -169,6 +169,7 @@
 import { ref, reactive, watch, defineProps, defineEmits } from 'vue'
 import { ElMessage } from 'element-plus'
 import { FolderOpened, Check, Refresh } from '@element-plus/icons-vue'
+import api from '@/api'
 
 const props = defineProps({
   config: {
@@ -243,14 +244,16 @@ const handleSave = async () => {
     saving.value = true
 
     // 调用API保存配置
-    // 这里模拟API调用
-    await new Promise(resolve => setTimeout(resolve, 1000))
+    const response = await api.updateSettings(form)
 
-    // 通知父组件配置已保存
-    const hasChange = checkFormChanges()
-    emit('change', hasChange)
-
-    ElMessage.success('基本设置已保存')
+    if (response.success) {
+      // 通知父组件配置已保存
+      const hasChange = checkFormChanges()
+      emit('change', hasChange)
+      ElMessage.success('基本设置已保存')
+    } else {
+      ElMessage.error(response.message || '保存失败')
+    }
   } catch (error) {
     console.error('保存基本设置失败:', error)
     ElMessage.error('保存失败')

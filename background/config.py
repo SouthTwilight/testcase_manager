@@ -24,7 +24,8 @@ class Config:
     SCHEDULE_END_TIME = time(8, 0)  # 次日8点
 
     # 执行器配置
-    MAX_CONCURRENT_TESTS = 5
+    # 注意：由于测试用例依赖唯一的硬件资源（测试机），必须串行执行
+    MAX_CONCURRENT_TESTS = 1  # 串行执行，一次只能执行一条用例
     TEST_TIMEOUT = 600  # 10分钟超时
 
     # 执行优先级权重

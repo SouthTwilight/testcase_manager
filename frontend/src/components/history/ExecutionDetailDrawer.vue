@@ -192,6 +192,7 @@ import { ElMessage } from 'element-plus'
 import { VideoPlay, Edit, CircleCheck, Download, Monitor } from '@element-plus/icons-vue'
 import StatusTag from '../cases/StatusTag.vue'
 import { formatTime, formatRelativeTime, formatDuration } from '@/utils/formatter'
+import api from '@/api'
 
 const props = defineProps({
   modelValue: {
@@ -250,43 +251,19 @@ const fetchExecutionDetail = async () => {
   try {
     loading.value = true
 
-    // 模拟数据，实际项目中应该调用API
-    executionData.value = {
-      id: props.executionId,
-      case_hash: 'abc123def456',
-      case_name: '测试登录功能',
-      status: 'failed',
-      execution_time: new Date().toISOString(),
-      executed_by: 'admin',
-      machine_id: 'machine-01',
-      duration: 1200,
-      plan_id: 1,
-      plan_name: '日常回归测试',
-      error_message: 'AssertionError: Expected "Welcome" but got "Login failed"',
-      stack_trace: 'File "test_login.py", line 45, in test_login\n    assert response.text == "Welcome"',
-      result_details: JSON.stringify({
-        request: {
-          method: 'POST',
-          url: '/login',
-          data: { username: 'admin', password: 'admin123' }
-        },
-        response: {
-          status_code: 200,
-          text: 'Login failed',
-          cookies: {}
-        },
-        screenshots: ['/screenshots/login_failed.png']
-      }, null, 2),
-      logs: [
-        { time: new Date(Date.now() - 3000).toISOString(), level: 'INFO', message: '开始执行测试用例' },
-        { time: new Date(Date.now() - 2000).toISOString(), level: 'INFO', message: '发送登录请求' },
-        { time: new Date(Date.now() - 1000).toISOString(), level: 'ERROR', message: '登录失败: AssertionError' },
-        { time: new Date().toISOString(), level: 'INFO', message: '保存失败截图' }
-      ]
+    // 调用API获取执行详情
+    const response = await api.getExecutionDetail(props.executionId)
+
+    if (response.success) {
+      executionData.value = response.execution
+    } else {
+      ElMessage.error(response.message || '获取执行详情失败')
+      executionData.value = null
     }
   } catch (error) {
     console.error('获取执行详情失败:', error)
     ElMessage.error('获取执行详情失败')
+    executionData.value = null
   } finally {
     loading.value = false
   }

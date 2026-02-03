@@ -2,11 +2,11 @@ import json
 from datetime import datetime
 from flask import Blueprint, request, jsonify
 import threading
-import concurrent.futures
 
 from extra.extensions import db
 from models import TestExecution, TestPlan, BatchExecution
 from run import app, scheduler
+from utils.logger import logger
 
 test_execution_bp = Blueprint('test_execution', __name__, url_prefix='/api')
 
@@ -84,6 +84,159 @@ def get_execution_history():
     })
 
 
+@test_execution_bp.route('/execution-history/<int:execution_id>', methods=['GET'])
+def get_execution_detail(execution_id):
+    """获取单条执行记录详情"""
+    execution = TestExecution.query.get(execution_id)
+
+    if not execution:
+        return jsonify({
+            'success': False,
+            'message': '执行记录不存在'
+        }), 404
+
+    # 获取关联的用例信息
+    test_case = None
+    if execution.case_hash:
+        from models import TestCase
+        test_case = TestCase.query.filter_by(case_hash=execution.case_hash).first()
+
+    return jsonify({
+        'success': True,
+        'execution': {
+            'id': execution.id,
+            'case_hash': execution.case_hash,
+            'case_name': test_case.name if test_case else None,
+            'case_path': test_case.relative_path if test_case else None,
+            'execution_time': execution.execution_time.isoformat() if execution.execution_time else None,
+            'status': execution.status,
+            'duration': execution.duration,
+            'details': execution.details,
+            'executed_by': execution.executed_by,
+            'machine_id': execution.machine_id,
+            'plan_id': execution.plan_id
+        }
+    })
+
+
+@test_execution_bp.route('/execution-history/<int:execution_id>', methods=['DELETE'])
+def delete_execution(execution_id):
+    """删除单条执行记录"""
+    execution = TestExecution.query.get(execution_id)
+
+    if not execution:
+        return jsonify({
+            'success': False,
+            'message': '执行记录不存在'
+        }), 404
+
+    db.session.delete(execution)
+    db.session.commit()
+
+    return jsonify({
+        'success': True,
+        'message': '执行记录已删除'
+    })
+
+
+@test_execution_bp.route('/execution-history/clear', methods=['POST'])
+def clear_execution_history():
+    """清理历史记录"""
+    data = request.get_json()
+
+    # 获取清理条件
+    older_than_days = data.get('older_than_days')
+    plan_id = data.get('plan_id')
+    status = data.get('status')
+
+    query = TestExecution.query
+
+    if older_than_days is not None:
+        from datetime import timedelta
+        cutoff_date = datetime.now() - timedelta(days=older_than_days)
+        query = query.filter(TestExecution.execution_time < cutoff_date)
+
+    if plan_id:
+        query = query.filter_by(plan_id=plan_id)
+
+    if status:
+        query = query.filter_by(status=status)
+
+    # 统计要删除的记录数
+    count = query.count()
+
+    if count == 0:
+        return jsonify({
+            'success': True,
+            'message': '没有符合条件的记录',
+            'deleted_count': 0
+        })
+
+    # 执行删除
+    query.delete()
+    db.session.commit()
+
+    return jsonify({
+        'success': True,
+        'message': f'已删除 {count} 条执行记录',
+        'deleted_count': count
+    })
+
+
+@test_execution_bp.route('/execution-history/stats', methods=['GET'])
+def get_execution_stats():
+    """获取执行历史统计"""
+    from sqlalchemy import func
+    from datetime import datetime, timedelta
+
+    # 默认统计最近30天
+    days = request.args.get('days', 30, type=int)
+    start_date = datetime.now() - timedelta(days=days)
+
+    # 基础统计
+    total = TestExecution.query.filter(
+        TestExecution.execution_time >= start_date
+    ).count()
+
+    # 按状态统计
+    stats = db.session.query(
+        TestExecution.status,
+        func.count('*').label('count')
+    ).filter(
+        TestExecution.execution_time >= start_date
+    ).group_by(TestExecution.status).all()
+
+    status_stats = {stat[0]: stat[1] for stat in stats}
+
+    # 按日期统计（最近7天）
+    daily_stats = db.session.query(
+        func.date(TestExecution.execution_time).label('date'),
+        TestExecution.status,
+        func.count('*').label('count')
+    ).filter(
+        TestExecution.execution_time >= datetime.now() - timedelta(days=7)
+    ).group_by(
+        func.date(TestExecution.execution_time),
+        TestExecution.status
+    ).all()
+
+    # 整理日统计数据
+    daily = {}
+    for date_str, status, count in daily_stats:
+        if date_str not in daily:
+            daily[date_str] = {'date': date_str.isoformat() if hasattr(date_str, 'isoformat') else str(date_str)}
+        daily[date_str][status] = count
+
+    return jsonify({
+        'success': True,
+        'stats': {
+            'total': total,
+            'by_status': status_stats,
+            'daily': list(daily.values())
+        }
+    })
+
+
 @test_execution_bp.route('/batch-execute-plans', methods=['POST'])
 def batch_execute_plans():
     """批量执行测试计划"""
@@ -137,7 +290,7 @@ def batch_execute_plans():
 
 
 def execute_batch_plans_async(batch_id, plan_ids, execution_config):
-    """异步执行批量计划"""
+    """异步执行批量计划（串行执行，因为依赖唯一硬件资源）"""
 
     with app.app_context():
         from models import BatchExecution, TestPlan
@@ -147,41 +300,33 @@ def execute_batch_plans_async(batch_id, plan_ids, execution_config):
             return
 
         try:
-            execution_mode = execution_config.get('execution_mode', 'sequential')
-            concurrency = execution_config.get('concurrency', 1)
+            # 注意：由于依赖唯一硬件资源（测试机），强制使用串行执行模式
             failure_handling = execution_config.get('failure_handling', 'continue')
 
             plans = TestPlan.query.filter(TestPlan.id.in_(plan_ids)).all()
 
-            # 根据执行模式执行
-            if execution_mode == 'sequential':
-                # 顺序执行
-                for plan in plans:
-                    try:
-                        execute_plan_sync(plan.id, execution_config)
-                    except Exception as e:
-                        if failure_handling == 'stop':
-                            break
-                        elif failure_handling == 'retry':
-                            # 重试逻辑
-                            pass
-                        continue  # continue模式继续执行下一个
+            # 强制串行执行，忽略execution_mode配置
+            logger.info(f"批量执行 {len(plans)} 个计划，将串行执行（依赖唯一硬件资源）")
 
-            elif execution_mode == 'parallel':
-                # 并行执行
-                with concurrent.futures.ThreadPoolExecutor(max_workers=concurrency) as executor:
-                    future_to_plan = {
-                        executor.submit(execute_plan_sync, plan.id, execution_config): plan
-                        for plan in plans
-                    }
-
-                    for future in concurrent.futures.as_completed(future_to_plan):
-                        plan = future_to_plan[future]
+            for index, plan in enumerate(plans, 1):
+                try:
+                    logger.info(f"正在执行第 {index}/{len(plans)} 个计划: {plan.name}")
+                    execute_plan_sync(plan.id, execution_config)
+                    logger.info(f"计划 {plan.name} 执行完成")
+                except Exception as e:
+                    logger.error(f"执行计划 {plan.name} 失败: {str(e)}")
+                    if failure_handling == 'stop':
+                        logger.warning("停止执行剩余计划")
+                        break
+                    elif failure_handling == 'retry':
+                        # 重试逻辑
+                        logger.info("重试执行...")
                         try:
-                            future.result()
-                        except Exception as e:
-                            # 错误处理
-                            pass
+                            execute_plan_sync(plan.id, execution_config)
+                        except Exception as retry_error:
+                            logger.error(f"重试失败: {str(retry_error)}")
+                            continue
+                    continue  # continue模式继续执行下一个
 
             # 更新批量执行状态
             batch_execution.status = 'completed'

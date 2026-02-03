@@ -359,13 +359,14 @@ const handleExecute = async () => {
 const handlePause = async () => {
   try {
     pausing.value = true
-    // 这里调用暂停API
-    // 由于没有暂停API，我们模拟一下
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    planData.value.status = 'paused'
-    await fetchPlanDetail()
-    ElMessage.success('计划已暂停')
-    emit('refresh')
+    const response = await api.pauseTestPlan(props.planId)
+    if (response.success) {
+      ElMessage.success('计划已暂停')
+      planData.value.status = 'paused'
+      emit('refresh')
+    } else {
+      ElMessage.error(response.message || '暂停计划失败')
+    }
   } catch (error) {
     console.error('暂停计划失败:', error)
     ElMessage.error('暂停计划失败')
@@ -378,12 +379,14 @@ const handlePause = async () => {
 const handleResume = async () => {
   try {
     resuming.value = true
-    // 这里调用继续执行API
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    planData.value.status = 'running'
-    await fetchPlanDetail()
-    ElMessage.success('计划已继续执行')
-    emit('refresh')
+    const response = await api.resumeTestPlan(props.planId)
+    if (response.success) {
+      ElMessage.success('计划已继续执行')
+      planData.value.status = 'running'
+      emit('refresh')
+    } else {
+      ElMessage.error(response.message || '继续执行失败')
+    }
   } catch (error) {
     console.error('继续执行失败:', error)
     ElMessage.error('继续执行失败')
@@ -405,11 +408,14 @@ const handleDelete = async () => {
         }
     )
 
-    // 这里调用删除API
-    // 由于没有删除API，我们模拟删除
-    ElMessage.success('计划已删除')
-    drawerVisible.value = false
-    emit('refresh')
+    const response = await api.deleteTestPlan(props.planId)
+    if (response.success) {
+      ElMessage.success('计划已删除')
+      drawerVisible.value = false
+      emit('refresh')
+    } else {
+      ElMessage.error(response.message || '删除计划失败')
+    }
   } catch (error) {
     if (error !== 'cancel') {
       console.error('删除计划失败:', error)

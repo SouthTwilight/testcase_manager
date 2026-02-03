@@ -241,9 +241,10 @@
     </el-form>
 
     <!-- 策略说明对话框 -->
-    <strategy-help-dialog
+    <!-- 暂时注释掉，后续实现 -->
+    <!-- <strategy-help-dialog
         v-model="helpDialogVisible"
-    />
+    /> -->
   </div>
 </template>
 
@@ -251,7 +252,8 @@
 import { ref, reactive, watch, defineProps, defineEmits } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Check, Refresh, AlarmClock } from '@element-plus/icons-vue'
-import StrategyHelpDialog from './StrategyHelpDialog.vue'
+// import StrategyHelpDialog from './StrategyHelpDialog.vue'
+import api from '@/api'
 
 const props = defineProps({
   config: {
@@ -332,14 +334,16 @@ const handleSave = async () => {
     saving.value = true
 
     // 调用API保存配置
-    // 这里模拟API调用
-    await new Promise(resolve => setTimeout(resolve, 1000))
+    const response = await api.updateSettings(form)
 
-    // 通知父组件配置已保存
-    const hasChange = checkFormChanges()
-    emit('change', hasChange)
-
-    ElMessage.success('定时任务配置已保存')
+    if (response.success) {
+      // 通知父组件配置已保存
+      const hasChange = checkFormChanges()
+      emit('change', hasChange)
+      ElMessage.success('定时任务配置已保存')
+    } else {
+      ElMessage.error(response.message || '保存失败')
+    }
   } catch (error) {
     console.error('保存定时任务配置失败:', error)
     ElMessage.error('保存失败')
