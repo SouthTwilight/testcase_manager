@@ -472,16 +472,22 @@ const handleExecutePlan = async (plan) => {
         }
     )
 
-    // 这里调用执行计划的API
-    // 由于后端API目前只支持创建和执行自定义计划，需要调整
-    // 我们先更新计划状态为执行中
-    const index = tableData.value.findIndex(item => item.id === plan.id)
-    if (index !== -1) {
-      tableData.value[index].status = 'running'
-    }
+    // 调用执行计划的API
+    const response = await api.executeTestPlan({
+      name: `执行计划: ${plan.name}`,
+      plan_type: plan.plan_type || 'manual',
+      case_ids: plan.case_ids || [],
+      distributed: plan.distributed || false
+    })
 
-    // 在实际项目中，这里应该调用执行计划的API
-    ElMessage.success('计划已开始执行')
+    if (response.success) {
+      // 更新计划状态为执行中
+      const index = tableData.value.findIndex(item => item.id === plan.id)
+      if (index !== -1) {
+        tableData.value[index].status = 'running'
+      }
+      ElMessage.success('计划已开始执行')
+    }
   } catch (error) {
     if (error !== 'cancel') {
       console.error('执行计划失败:', error)
@@ -511,13 +517,17 @@ const handleDeletePlan = async (plan) => {
         }
     )
 
-    // 这里调用删除计划的API
-    // 由于后端API目前没有删除计划，我们先模拟删除
-    const index = tableData.value.findIndex(item => item.id === plan.id)
-    if (index !== -1) {
-      tableData.value.splice(index, 1)
-      pagination.total--
-      ElMessage.success('计划删除成功')
+    // 调用删除计划的API
+    const response = await api.deleteTestPlan(plan.id)
+
+    if (response.success) {
+      // 从列表中移除
+      const index = tableData.value.findIndex(item => item.id === plan.id)
+      if (index !== -1) {
+        tableData.value.splice(index, 1)
+        pagination.total--
+      }
+      ElMessage.success(response.message || '计划删除成功')
     }
   } catch (error) {
     if (error !== 'cancel') {

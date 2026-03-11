@@ -298,7 +298,47 @@ const prepareChartData = () => {
   ].filter(item => item.value > 0)
 }
 
-// 其他方法保持不变...
+// 扫描用例
+const handleScanCases = async () => {
+  try {
+    scanLoading.value = true
+    const response = await api.scanCases({ scan_type: 'incremental' })
+    if (response.success) {
+      ElMessage.success(response.message || '扫描已开始')
+      // 延迟刷新数据
+      setTimeout(fetchDashboardData, 2000)
+    }
+  } catch (error) {
+    console.error('扫描用例失败:', error)
+    ElMessage.error('扫描用例失败')
+  } finally {
+    scanLoading.value = false
+  }
+}
+
+// 执行计划
+const handleExecutePlan = () => {
+  planDialogVisible.value = true
+}
+
+// 查看失败用例
+const handleCheckFailures = () => {
+  router.push({
+    path: '/test-cases',
+    query: { status: 'failed' }
+  })
+}
+
+// 跳转到执行历史
+const gotoHistory = () => {
+  router.push('/execution-history')
+}
+
+// 计划执行成功回调
+const handlePlanSuccess = () => {
+  ElMessage.success('计划已开始执行')
+  fetchDashboardData()
+}
 
 // 组件挂载时加载数据
 onMounted(() => {

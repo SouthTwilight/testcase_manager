@@ -191,49 +191,64 @@ const fetchSystemConfig = async () => {
 
 // 获取基本配置
 const fetchBasicConfig = async () => {
-  // 模拟数据
-  Object.assign(basicConfig, {
-    system_name: '自动化测试平台',
-    system_version: '1.0.0',
-    test_case_root: '/data/test_cases',
-    watchdog_enabled: true,
-    auto_scan_interval: 300,
-    max_history_days: 30,
-    default_language: 'zh-CN',
-    timezone: 'Asia/Shanghai',
-    enable_audit_log: true
-  })
+  try {
+    const response = await api.getSettings()
+    if (response.success && response.settings) {
+      Object.assign(basicConfig, {
+        system_name: response.settings.system_name || '测试用例管理系统',
+        system_version: response.settings.system_version || '1.0.0',
+        test_case_root: response.settings.test_case_root || '',
+        watchdog_enabled: response.settings.watchdog_enabled ?? true,
+        auto_scan_interval: response.settings.auto_scan_interval || 300,
+        max_history_days: response.settings.max_history_days || 30,
+        default_language: response.settings.default_language || 'zh-CN',
+        timezone: response.settings.timezone || 'Asia/Shanghai',
+        enable_audit_log: response.settings.enable_audit_log ?? false
+      })
+    }
+  } catch (error) {
+    console.error('获取基本配置失败:', error)
+  }
 }
 
 // 获取定时任务配置
 const fetchSchedulerConfig = async () => {
-  // 模拟数据
-  Object.assign(schedulerConfig, {
-    enabled: true,
-    schedule_time: '23:00',
-    schedule_days: ['1', '2', '3', '4', '5', '6', '0'],
-    max_parallel_plans: 3,
-    auto_retry_failed: true,
-    retry_count: 3,
-    timeout_hours: 8,
-    notify_on_complete: true
-  })
+  try {
+    const response = await api.getSettings()
+    if (response.success && response.settings) {
+      Object.assign(schedulerConfig, {
+        enabled: response.settings.scheduler_enabled ?? true,
+        schedule_time: response.settings.schedule_time || '23:00',
+        schedule_days: response.settings.schedule_days || ['1', '2', '3', '4', '5'],
+        max_parallel_plans: response.settings.max_parallel_plans || 3,
+        auto_retry_failed: response.settings.auto_retry_failed ?? true,
+        retry_count: response.settings.retry_count || 3,
+        timeout_hours: response.settings.timeout_hours || 8,
+        notify_on_complete: response.settings.notify_on_complete ?? true
+      })
+    }
+  } catch (error) {
+    console.error('获取定时任务配置失败:', error)
+  }
 }
 
 // 获取执行器配置
 const fetchExecutorConfig = async () => {
-  // 模拟数据
-  Object.assign(executorConfig, {
-    executor_type: 'local',
-    max_workers: 4,
-    task_timeout: 1800,
-    memory_limit: '2G',
-    cpu_limit: '50%',
-    enable_cache: true,
-    cache_ttl: 3600,
-    log_level: 'INFO',
-    log_retention: '30d'
-  })
+  try {
+    const response = await api.getSettings()
+    if (response.success && response.settings) {
+      Object.assign(executorConfig, {
+        executor_type: response.settings.executor_type || 'local',
+        max_workers: response.settings.max_workers || 4,
+        task_timeout: response.settings.task_timeout || 1800,
+        enable_cache: response.settings.enable_cache ?? true,
+        cache_ttl: response.settings.cache_ttl || 3600,
+        log_level: response.settings.log_level || 'INFO'
+      })
+    }
+  } catch (error) {
+    console.error('获取执行器配置失败:', error)
+  }
 }
 
 // 获取通知配置
@@ -277,21 +292,24 @@ const fetchStorageConfig = async () => {
 // 获取系统信息
 const fetchSystemInfo = async () => {
   try {
-    // 这里可以调用系统信息API
-    // 模拟数据
-    Object.assign(systemInfo, {
-      platform: process.platform,
-      arch: process.arch,
-      node_version: process.version,
-      uptime: Math.floor(process.uptime()),
-      memory_usage: process.memoryUsage(),
-      cpu_count: navigator.hardwareConcurrency || 4,
-      hostname: window.location.hostname,
-      environment: process.env.NODE_ENV || 'development',
-      flask_version: '2.0.0',
-      python_version: '3.9.0',
-      database_version: 'SQLite 3.35.0'
-    })
+    const response = await api.getSystemInfo()
+    if (response.success && response.system) {
+      Object.assign(systemInfo, {
+        hostname: response.system.hostname || window.location.hostname,
+        platform: response.system.platform || 'Unknown',
+        python_version: response.system.python_version || 'Unknown',
+        cpu_usage: response.system.cpu_usage || 0,
+        memory_usage: response.system.memory_usage || 0,
+        memory_total: response.system.memory_total || 0,
+        memory_available: response.system.memory_available || 0,
+        disk_usage: response.system.disk_usage || 0,
+        disk_total: response.system.disk_total || 0,
+        disk_free: response.system.disk_free || 0,
+        total_cases: response.database?.total_cases || 0,
+        total_plans: response.database?.total_plans || 0,
+        total_executions: response.database?.total_executions || 0
+      })
+    }
   } catch (error) {
     console.error('获取系统信息失败:', error)
   }

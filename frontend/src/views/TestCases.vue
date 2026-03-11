@@ -54,6 +54,14 @@
 
         <div class="toolbar-actions">
           <el-button
+              type="primary"
+              :icon="FolderAdd"
+              @click="handleScanCases"
+              :loading="scanning"
+          >
+            扫描用例
+          </el-button>
+          <el-button
               type="success"
               :icon="VideoPlay"
               @click="handleBatchExecute"
@@ -256,6 +264,52 @@
         :case-data="editingCase"
         @success="handleEditSuccess"
     />
+
+    <!-- 扫描用例对话框 -->
+    <el-dialog
+        v-model="scanDialogVisible"
+        title="扫描用例"
+        width="500px"
+    >
+      <el-form :model="scanForm" label-width="100px">
+        <el-form-item label="扫描类型">
+          <el-radio-group v-model="scanForm.scan_type">
+            <el-radio value="incremental">
+              <div class="scan-option">
+                <span class="scan-option-title">增量扫描</span>
+                <span class="scan-option-desc">只扫描新增和修改的用例</span>
+              </div>
+            </el-radio>
+            <el-radio value="full">
+              <div class="scan-option">
+                <span class="scan-option-title">全量扫描</span>
+                <span class="scan-option-desc">重新扫描所有用例</span>
+              </div>
+            </el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item label="说明">
+          <div class="scan-info">
+            <p v-if="scanForm.scan_type === 'incremental'">
+              增量扫描会检测用例目录中的新增文件、修改过的文件和已删除的文件，并更新数据库中的用例状态。
+            </p>
+            <p v-else>
+              全量扫描会遍历整个用例目录，重新识别所有测试用例。适用于首次扫描或数据重建场景。
+            </p>
+          </div>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="scanDialogVisible = false">取消</el-button>
+        <el-button
+            type="primary"
+            @click="executeScan"
+            :loading="scanning"
+        >
+          开始扫描
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -268,7 +322,8 @@ import {
   Refresh,
   VideoPlay,
   Edit,
-  Folder
+  Folder,
+  FolderAdd
 } from '@element-plus/icons-vue'
 import api from '../api'
 import StatusTag from '../components/cases/StatusTag.vue'
@@ -286,6 +341,13 @@ const tableData = ref([])
 const directoryTree = ref([])
 const selection = ref([])
 const executingCase = ref(null)
+
+// 扫描相关状态
+const scanning = ref(false)
+const scanDialogVisible = ref(false)
+const scanForm = reactive({
+  scan_type: 'incremental'
+})
 
 // 分页
 const pagination = reactive({
@@ -570,6 +632,39 @@ const handleBatchSuccess = () => {
   ElMessage.success('批量执行已开始')
 }
 
+// 打开扫描对话框
+const handleScanCases = () => {
+  scanForm.scan_type = 'incremental'
+  scanDialogVisible.value = true
+}
+
+// 执行扫描
+const executeScan = async () => {
+  try {
+    scanning.value = true
+
+    const response = await api.scanCases({
+      scan_type: scanForm.scan_type
+    })
+
+    if (response.success) {
+      ElMessage.success(response.message || '扫描已开始')
+      scanDialogVisible.value = false
+
+      // 延迟刷新列表，等待后台扫描完成
+      setTimeout(() => {
+        fetchTestCases()
+        fetchDirectoryTree()
+      }, 2000)
+    }
+  } catch (error) {
+    console.error('扫描用例失败:', error)
+    ElMessage.error('扫描用例失败')
+  } finally {
+    scanning.value = false
+  }
+}
+
 // 监听路由参数
 watch(
     () => route.query,
@@ -745,6 +840,35 @@ onMounted(() => {
   margin-top: 20px;
   display: flex;
   justify-content: flex-end;
+}
+
+/* 扫描对话框样式 */
+.scan-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  margin-left: 8px;
+}
+
+.scan-option-title {
+  font-weight: 500;
+  color: #303133;
+}
+
+.scan-option-desc {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 2px;
+}
+
+.scan-info {
+  font-size: 13px;
+  color: #606266;
+  line-height: 1.6;
+}
+
+.scan-info p {
+  margin: 0;
 }
 
 @media (max-width: 768px) {
